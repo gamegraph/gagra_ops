@@ -18,8 +18,18 @@ class DumpQueue
 
   def run
     $stdout.sync = true # Don't buffer stdout
-    @q.poll(poll_opts) do |msg|
-      puts msg.body
+    naptime = 5.0 # initial backoff
+    while naptime < 300 do
+      begin
+        @q.poll(poll_opts) do |msg|
+          naptime = 5.0 # success, so reset backoff
+          puts msg.body
+        end
+      rescue SocketError
+        $stderr.puts "SocketError: " + $!
+      end
+      sleep naptime
+      naptime ** 1.5 # exponential backoff
     end
   end
 
