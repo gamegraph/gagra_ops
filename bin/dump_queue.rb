@@ -26,10 +26,10 @@ class DumpQueue
           puts msg.body
         end
       rescue SocketError
-        $stderr.puts "SocketError: " + $!
+        $stderr.puts "SocketError: " + $!.to_s
       end
       sleep naptime
-      naptime ** 1.5 # exponential backoff
+      naptime = naptime ** 1.5 # exponential backoff
     end
   end
 
