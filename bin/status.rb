@@ -22,11 +22,7 @@ module GagraStatus
     end
 
     def username_count_by_requested
-      result = @conn.exec("
-        select requested, count(*) as c
-        from kgs_usernames
-        group by requested")
-      {requested: result[1]['c'], not_requested: result[0]['c']}
+      table_count_by_grouping :kgs_usernames, :requested
     end
 
     private
@@ -47,6 +43,14 @@ module GagraStatus
     def table_count table
       @conn.exec("select count(*) as c from #{table}")[0]['c']
     end
+
+    def table_count_by_grouping table, group_col
+      result = @conn.exec("
+        select #{group_col.to_s}, count(*) as c
+        from #{table.to_s}
+        group by #{group_col.to_s}")
+      {false => result[0]['c'].to_i, true => result[1]['c'].to_i}
+    end
   end
 
   class Main
@@ -58,10 +62,10 @@ module GagraStatus
       puts "%10d %s" % [@db.player_count, 'Players']
       puts "%10d %s" % [@db.game_count, 'Games']
       unc = @db.username_count_by_requested
-      puts "%10d %s" % [unc[:requested].to_i, 'Usernames requested']
-      puts "%10d %s" % [unc[:not_requested].to_i, 'Usernames pending']
-      total_un = unc[:requested].to_i + unc[:not_requested].to_i
-      puts "%10.2f %s" % [pct(unc[:requested], total_un), 'Usernames pct req.']
+      puts "%10d %s" % [unc[true], 'Usernames requested']
+      puts "%10d %s" % [unc[false], 'Usernames pending']
+      un_pct = pct(unc[true], unc[true] + unc[false])
+      puts "%10.2f %s" % [un_pct, 'Usernames pct req.']
     end
 
     private
