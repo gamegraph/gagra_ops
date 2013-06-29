@@ -21,8 +21,12 @@ module GagraStatus
       table_count 'players'
     end
 
-    def username_count_by_requested
-      table_count_by_grouping :kgs_usernames, :requested
+    def table_count_by_grouping table, group_col
+      result = @conn.exec("
+        select #{group_col.to_s}, count(*) as c
+        from #{table.to_s}
+        group by #{group_col.to_s}")
+      {false => result[0]['c'].to_i, true => result[1]['c'].to_i}
     end
 
     private
@@ -43,14 +47,6 @@ module GagraStatus
     def table_count table
       @conn.exec("select count(*) as c from #{table}")[0]['c']
     end
-
-    def table_count_by_grouping table, group_col
-      result = @conn.exec("
-        select #{group_col.to_s}, count(*) as c
-        from #{table.to_s}
-        group by #{group_col.to_s}")
-      {false => result[0]['c'].to_i, true => result[1]['c'].to_i}
-    end
   end
 
   class Main
@@ -61,11 +57,8 @@ module GagraStatus
     def run
       puts "%10d %s" % [@db.player_count, 'Players']
       puts "%10d %s" % [@db.game_count, 'Games']
-      unc = @db.username_count_by_requested
-      puts "%10d %s" % [unc[true], 'Usernames requested']
-      puts "%10d %s" % [unc[false], 'Usernames pending']
-      un_pct = pct(unc[true], unc[true] + unc[false])
-      puts "%10.2f %s" % [un_pct, 'Usernames pct req.']
+      queue_table_status :kgs_usernames, "Usernames"
+      queue_table_status :kgs_month_urls, "Month URLs"
     end
 
     private
@@ -75,6 +68,13 @@ module GagraStatus
       (n.to_f / total.to_f) * 100.0
     end
 
+    def queue_table_status table, description
+      hsh = @db.table_count_by_grouping table, :requested
+      puts "%10d %s requested" % [hsh[true], description]
+      puts "%10d %s pending" % [hsh[false], description]
+      queue_pct = pct(hsh[true], hsh[true] + hsh[false])
+      puts "%10.2f %s pct req." % [queue_pct, description]
+    end
   end
 end
 
