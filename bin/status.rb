@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'action_view/helpers/number_helper'
 require 'dotenv'
 require 'pg'
 require 'pp'
@@ -50,18 +51,28 @@ module GagraStatus
   end
 
   class Main
+    include ActionView::Helpers::NumberHelper
+
+    NUM_COL_WIDTH = 11.freeze
+
     def initialize
       @db = Db.new
     end
 
     def run
-      puts "%10d %s" % [@db.player_count, 'Players']
-      puts "%10d %s" % [@db.game_count, 'Games']
+      puts "%#{NUM_COL_WIDTH}s   %s" % [intf(@db.player_count), 'Players']
+      puts "%#{NUM_COL_WIDTH}s   %s" % [intf(@db.game_count), 'Games']
       queue_table_status :kgs_usernames, "Usernames"
       queue_table_status :kgs_month_urls, "Month URLs"
     end
 
     private
+
+    # Using space as a delimiter is recommended in the SI/ISO 31-0 standard
+    # http://en.wikipedia.org/wiki/ISO_31-0#Numbers
+    def intf i
+      number_with_delimiter i, :delimiter => ' '
+    end
 
     # `pct` calls `to_f` to avoid rescuing `ZeroDivisionError`
     def pct n, total
@@ -70,10 +81,10 @@ module GagraStatus
 
     def queue_table_status table, description
       hsh = @db.table_count_by_grouping table, :requested
-      puts "%10d %s requested" % [hsh[true], description]
-      puts "%10d %s pending" % [hsh[false], description]
+      puts "%#{NUM_COL_WIDTH}s   %s requested" % [intf(hsh[true]), description]
+      puts "%#{NUM_COL_WIDTH}s   %s pending" % [intf(hsh[false]), description]
       queue_pct = pct(hsh[true], hsh[true] + hsh[false])
-      puts "%10.2f %s pct req." % [queue_pct, description]
+      puts "%#{NUM_COL_WIDTH+2}.1f %s pct req." % [queue_pct, description]
     end
   end
 end
