@@ -18,10 +18,6 @@ module GagraStatus
       table_count 'games'
     end
 
-    def player_count
-      table_count 'players'
-    end
-
     def table_count_by_grouping table, group_col
       result = @conn.exec("
         select #{group_col.to_s}, count(*) as c
@@ -60,7 +56,6 @@ module GagraStatus
     end
 
     def run
-      puts "%#{NUM_COL_WIDTH}s   %s" % [intf(@db.player_count), 'Players']
       puts "%#{NUM_COL_WIDTH}s   %s" % [intf(@db.game_count), 'Games']
       queue_table_status :kgs_usernames, "Usernames"
       queue_table_status :kgs_month_urls, "Month URLs"
