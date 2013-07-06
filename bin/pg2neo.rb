@@ -35,30 +35,32 @@ module Pg2Neo
         responses = @neo.batch *batch_cmds
         responses.each do |r|
           node_id = r.fetch("location").split("/").last.to_i
-          un = r.fetch("body").fetch("data").fetch("kgsun").to_s
+          un = r.fetch("body").fetch("data").fetch("kgsun").to_s.downcase
           @uname_to_nodeid[un] = node_id
         end
+        print '.'
       end
       puts ' '
     end
 
     def create_relationships_from_games
       puts "Creating relationships .."
-      games.each_with_index do |g, ix|
-        unw = g['kgs_un_w']
-        unb = g['kgs_un_b']
-        # puts sprintf 'rel: w: %s %d b: %s %d', \
-        #   unw, nid(@uname_to_nodeid[unw]), unb, nid(@uname_to_nodeid[unb])
-        w = @uname_to_nodeid[unw]
-        b = @uname_to_nodeid[unb]
-        if !w.nil? && !b.nil?
-          rel = @neo.create_relationship("game", w, b)
-          props = g.to_hash.reject { |k,v| ['kgs_un_w', 'kgs_un_b'].include? k }
-          @neo.set_relationship_properties(rel, props)
-        else
-          print 's'
+      games.each_slice(BATCH_SIZE) do |batch|
+        batch_cmds = []
+        batch.each do |game|
+          unw = game['kgs_un_w'].downcase
+          unb = game['kgs_un_b'].downcase
+          w = @uname_to_nodeid[unw]
+          b = @uname_to_nodeid[unb]
+          if !w.nil? && !b.nil?
+            props = game.to_hash.reject { |k,v| ['kgs_un_w', 'kgs_un_b'].include? k }
+            batch_cmds << [:create_relationship, "game", w, b, props]
+          else
+            print 's' # "skipped"
+          end
         end
-        print "#{ix} " if ix % 1000 == 0
+        @neo.batch *batch_cmds
+        print '.'
       end
       puts ' '
     end
