@@ -1,0 +1,17 @@
+start a=node(0)
+delete a;
+
+start a=node(*)
+match a
+where a.kgsun = 'klayzen'
+return a;
+
+start a=node(*), b=node(*)
+match a, b
+where a.kgsun = 'jared' and b.kgsun = 'oneeyecat'
+return a, b;
+
+start a=node(*), b=node(*)
+match p = shortestPath(a-[*..99]-b)
+where a.kgsun = 'jared' and b.kgsun = 'charlesgo'
+return p;
