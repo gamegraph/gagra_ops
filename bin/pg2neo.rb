@@ -1,18 +1,23 @@
 #!/usr/bin/env ruby
+$stdout.sync = true
 
 require 'dotenv'
 require 'rubygems'
 require 'neography'
 require 'pg'
+require 'pry'
 require 'uri'
 
 module Pg2Neo
   class Main
+    BATCH_SIZE = 1000
+    NEO4J_DATA_DIR = '/usr/local/Cellar/neo4j/community-1.9.1-unix/libexec/data'
+
     def initialize
       Dotenv.load
       @pg = pg_client
       @neo = neography_client
-      @uname_to_node = {}
+      @uname_to_nodeid = {}
     end
 
     def run
@@ -24,34 +29,42 @@ module Pg2Neo
     private
 
     def create_nodes_from_usernames
-      usernames.each_with_index do |un, ix|
-        n = @neo.create_node("kgsun" => un.to_s)
-        @uname_to_node[un] = n
-        puts sprintf 'node: %s %d', un, nid(n)
+      puts "Creating nodes .."
+      usernames.each_slice(BATCH_SIZE) do |batch|
+        batch_cmds = batch.map { |un| [:create_node, node(un)] }
+        responses = @neo.batch *batch_cmds
+        responses.each do |r|
+          node_id = r.fetch("location").split("/").last.to_i
+          un = r.fetch("body").fetch("data").fetch("kgsun").to_s
+          @uname_to_nodeid[un] = node_id
+        end
       end
+      puts ' '
     end
 
     def create_relationships_from_games
+      puts "Creating relationships .."
       games.each_with_index do |g, ix|
         unw = g['kgs_un_w']
         unb = g['kgs_un_b']
-        puts sprintf 'rel: w: %s %d b: %s %d', \
-          unw, nid(@uname_to_node[unw]), unb, nid(@uname_to_node[unb])
-        w = @uname_to_node[unw]
-        b = @uname_to_node[unb]
-        rel = @neo.create_relationship("game", w, b)
-        props = g.to_hash.reject { |k,v| ['kgs_un_w', 'kgs_un_b'].include? k }
-        @neo.set_relationship_properties(rel, props)
+        # puts sprintf 'rel: w: %s %d b: %s %d', \
+        #   unw, nid(@uname_to_nodeid[unw]), unb, nid(@uname_to_nodeid[unb])
+        w = @uname_to_nodeid[unw]
+        b = @uname_to_nodeid[unb]
+        if !w.nil? && !b.nil?
+          rel = @neo.create_relationship("game", w, b)
+          props = g.to_hash.reject { |k,v| ['kgs_un_w', 'kgs_un_b'].include? k }
+          @neo.set_relationship_properties(rel, props)
+        else
+          print 's'
+        end
+        print "#{ix} " if ix % 1000 == 0
       end
+      puts ' '
     end
 
     def games
-      tuples = @pg.exec "
-        select *
-        from games
-        where kgs_un_w in (#{username_qry})
-          and kgs_un_b in (#{username_qry})
-        limit 100"
+      tuples = @pg.exec "select * from games"
       puts sprintf 'pg: %d games', tuples.ntuples
       return tuples
     end
@@ -64,8 +77,8 @@ module Pg2Neo
       Neography::Rest.new
     end
 
-    def nid n
-      n['self'].split('/').last
+    def node username
+      {"kgsun" => username.to_s}
     end
 
     def pg_client
@@ -77,20 +90,24 @@ module Pg2Neo
         password: uri.password)
     end
 
+    # Deleting millions of nodes and relationships in `neo4j` is very slow
+    # using a query like `start a=node(*) match a-[r?]-() delete a,r`.
+    # However, it seems to be an accepted practice to simply delete
+    # the `graph.db` file.
     def neo_delete_all
-      @neo.execute_query("start a=node(*) match a-[r?]-() delete a,r")
+      puts "Stopping neo4j .."
+      system "neo4j stop"
+      puts "Deleting graph.db .."
+      system "rm -r #{NEO4J_DATA_DIR}/graph.db"
+      puts "Starting neo4j .."
+      system "neo4j start"
     end
 
     def usernames
-      tuples = @pg.exec username_qry
+      tuples = @pg.exec 'select un from kgs_usernames'
       puts sprintf 'pg: %d usernames', tuples.ntuples
       return tuples.field_values('un')
     end
-
-    def username_qry
-      'select un from kgs_usernames where requested = true limit 1000'
-    end
-
   end
 end
 
