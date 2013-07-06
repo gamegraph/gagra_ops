@@ -24,6 +24,7 @@ module Pg2Neo
       neo_delete_all
       create_nodes_from_usernames
       create_relationships_from_games
+      # TODO: delete node(0)
     end
 
     private
