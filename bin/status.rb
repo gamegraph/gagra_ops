@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+$stdout.sync = true
 
 require 'action_view/helpers/number_helper'
 require 'dotenv'
@@ -24,6 +25,19 @@ module GagraStatus
         from #{table.to_s}
         group by #{group_col.to_s}")
       {false => result[0]['c'].to_i, true => result[1]['c'].to_i}
+    end
+
+    def usernames_without_games
+      result = @conn.exec("
+        select count(u.*) as c
+        from kgs_usernames u
+        left join (select distinct lower(kgs_un_w) as un from games) w
+          on w.un = lower(u.un)
+        left join (select distinct lower(kgs_un_b) as un from games) b
+          on b.un = lower(u.un)
+        where w.un is null
+          and b.un is null;")
+      result[0]['c'].to_i
     end
 
     private
@@ -59,6 +73,7 @@ module GagraStatus
       puts "%#{NUM_COL_WIDTH}s   %s" % [intf(@db.game_count), 'Games']
       queue_table_status :kgs_usernames, "Usernames"
       queue_table_status :kgs_month_urls, "Month URLs"
+      puts "%#{NUM_COL_WIDTH}s   %s" % [intf(@db.usernames_without_games), 'Usernames without games']
     end
 
     private
